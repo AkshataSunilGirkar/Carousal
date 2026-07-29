@@ -23,8 +23,10 @@ export default Blits.Component('Rail', {
       />
 
       <!-- clipped viewport: the card strip slides so the focused card lands
-           at local x=0 (the fixed frame), cards to its left are clipped away -->
-      <Element x="80" y="44" w="1760" h="280" clipping="true">
+           at local x=0 (the fixed frame), cards to its left are clipped away.
+           Width runs to the screen edge (80 + 1840 = 1920) so cards reach the
+           right end of the screen. -->
+      <Element x="80" y="44" w="1840" h="280" clipping="true">
         <Element :x.transition="{value: 0 - $cursor * 220, duration: 250, easing: 'ease-out'}">
           <Card
             :for="(item, index) in $items"

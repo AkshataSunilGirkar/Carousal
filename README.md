@@ -58,19 +58,39 @@ A minimal live overlay in the top-right corner shows just two numbers:
 ## Deploying to GitHub Pages
 
 A 404 for `…github.io/src/index.js` means the **source** was published instead
-of the built app. GitHub Pages must serve the production build (`dist/`), whose
-`index.html` loads hashed, relative assets (`./assets/…`).
+of the built app — i.e. Pages is serving the repo root's dev `index.html`
+(which references `/src/index.js`). GitHub Pages must serve the production
+build (`dist/`), whose `index.html` loads hashed, relative assets (`./assets/…`).
 
-This repo includes a workflow ([.github/workflows/deploy.yml](.github/workflows/deploy.yml))
-that builds and deploys `dist/` automatically. To enable it:
+**Do not** push `dist/` to your `main` branch root — that mixes build output
+with source and won't fix the setting. Use one of these instead.
 
-1. Push to `main`/`master`.
+### Option A — GitHub Actions (recommended)
+
+This repo includes [.github/workflows/deploy.yml](.github/workflows/deploy.yml),
+which builds and publishes `dist/` on every push. Enable it once:
+
+1. Commit everything (including `package-lock.json`) and push to `main`/`master`.
 2. In the repo: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 
-The workflow then builds and publishes on every push. Routing uses the URL hash
-(`#/movies`), so deep links and refreshes work on static hosting without
-server rewrites. `base: './'` in [vite.config.js](vite.config.js) keeps asset
-paths relative, so it works under the `username.github.io/<repo>/` sub-path.
+> If Pages is still set to *"Deploy from a branch → main → / (root)"*, that is
+> exactly what produces the `/src/index.js` 404 — switch the Source to
+> **GitHub Actions**.
+
+### Option B — manual publish of `dist/`
+
+Publishes only the built files to a separate `gh-pages` branch:
+
+```bash
+npm run deploy
+```
+
+Then set **Settings → Pages → Source: Deploy from a branch → `gh-pages` → `/ (root)`**.
+
+Either way: routing uses the URL hash (`#/movies`), so deep links and refreshes
+work on static hosting without server rewrites, and `base: './'` in
+[vite.config.js](vite.config.js) keeps asset paths relative so it works under
+the `username.github.io/<repo>/` sub-path.
 
 ## Running on a TV
 
