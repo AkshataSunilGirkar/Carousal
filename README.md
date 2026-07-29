@@ -43,17 +43,27 @@ active rail.
 
 ### Stats overlay
 
-A minimal live overlay in the top-right corner shows just two numbers:
+A live overlay in the top-right corner shows three numbers, using the **exact
+same formulas as the JSTV perf HUD** so measurements are directly comparable
+between the two apps:
 
-- **FPS** — the renderer's real frame rate, sampled only while it is actively
-  drawing (colour-coded: green ≥ 50, amber ≥ 30, red below). Lightning renders
-  on-change, so when nothing is animating it goes idle and the FPS holds steady
-  instead of bouncing.
-- **Work (ms)** — actual main-thread time spent producing each frame (JS +
-  issuing GPU draw calls), averaged over the FPS window and lightly smoothed.
-  It reads **0 ms · idle** when the renderer isn't drawing, and rises under real
-  render load (e.g. while scrolling). GPU execution time is not included (the
-  renderer doesn't expose it to app code).
+- **FPS** = `1000 / frameMsAvg` (colour-coded: green ≥ 50, amber ≥ 30, red below).
+- **frame ms** = time between the start of consecutive frames (`now − prevNow`),
+  smoothed with an EMA.
+- **work ms** = main-thread time spent on update + render each frame
+  (`afterRender − beforeRender`), smoothed with an EMA.
+
+Both raw samples are smoothed with an exponential moving average
+(`avg += (sample − avg) × α`, `α = 0.05`, ≈ 20-frame window). The samples are
+collected every frame via the `frameTick` hook (the "after render" timestamp is
+taken in a microtask that runs once the frame's render task completes), while
+the displayed values are refreshed at most every 250 ms.
+
+> Note: Lightning renders on-change, so when the app is idle `frame ms` reflects
+> the renderer's idle-loop cadence rather than a 60 fps draw loop — expected for
+> a render-on-change engine. During activity (scrolling/animation) the numbers
+> line up with a continuously-rendering app. `work ms` is CPU/main-thread only;
+> GPU execution time isn't included.
 
 ## Deploying to GitHub Pages
 

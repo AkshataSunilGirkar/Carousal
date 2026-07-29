@@ -31,47 +31,49 @@ export default Blits.Component('Catalog', {
       // NB: Blits calls state() once at setup time with no props (to discover
       // the state keys), so guard against `rails` being undefined here.
       railCursors: (this.rails || []).map(() => 0),
-      // stats
+      // perf HUD — uses the exact same formulas as the JSTV perf HUD so the
+      // two apps can be compared with identical measurements.
       fps: 0,
+      frameMs: 0,
       workMs: 0,
-      active: true,
     }
   },
   hooks: {
-    // Lightning only renders when the scene changes. When idle it runs a
-    // self-paced housekeeping loop whose timing is jittery, so we must NOT
-    // report that as FPS or work. `idle(true)` fires on going idle,
-    // `idle(false)` on becoming active again.
-    idle(isIdle) {
-      this.active = !isIdle
-      if (isIdle) {
-        // Nothing is being rendered -> no work is being done.
-        this.workMs = 0
-        this._wAcc = 0
-        this._wFrames = 0
-      }
-    },
-    // Accumulate real main-thread work per frame: the time from the start of a
-    // frame (frameTick, emitted before updates/render) until that frame's
-    // render task finishes, captured in a microtask that runs after the task.
+    // Perf HUD, matching JSTV's tick()/updatePerfHud():
+    //   frameMs = now - previousNow           (time between frame starts)
+    //   workMs  = afterRender - beforeRender   (update + render time)
+    //   both smoothed with an EMA (alpha 0.05, ~20-frame window)
+    //   fps = 1000 / frameMsAvg
+    //   the displayed values are refreshed at most every 250ms
+    // `frameTick` fires at the START of every frame (before update/render);
+    // a microtask scheduled here runs AFTER that frame's render task, giving
+    // us the "after render" timestamp.
     frameTick() {
-      const t0 = performance.now()
+      const now = performance.now()
+      const frameMs = this._prevNow === undefined ? 0 : now - this._prevNow
+      this._prevNow = now
       Promise.resolve().then(() => {
-        this._wAcc = (this._wAcc || 0) + (performance.now() - t0)
-        this._wFrames = (this._wFrames || 0) + 1
+        const workMs = performance.now() - now
+        const alpha = 0.05
+        if (this._perfInit === true) {
+          this._frameAvg += (frameMs - this._frameAvg) * alpha
+          this._workAvg += (workMs - this._workAvg) * alpha
+        } else {
+          // first frame: seed the averages, skip EMA
+          this._frameAvg = frameMs
+          this._workAvg = workMs
+          this._perfInit = true
+        }
+        // HUD refresh gate: only rewrite the displayed values every 250ms
+        // (the EMA above still accumulates every frame).
+        const ts = performance.now()
+        if (this._lastHud === undefined || ts - this._lastHud >= 250) {
+          this._lastHud = ts
+          this.fps = this._frameAvg > 0 ? Math.round(1000 / this._frameAvg) : 0
+          this.frameMs = Math.round(this._frameAvg * 10) / 10
+          this.workMs = Math.round(this._workAvg * 10) / 10
+        }
       })
-    },
-    // Roll up both stats once per FPS window (~500ms) so the readout is stable.
-    // FPS comes straight from the renderer; work is the averaged per-frame
-    // main-thread time, lightly smoothed to remove frame-to-frame jitter.
-    fpsUpdate(fps) {
-      if (!this.active) return // ignore idle-loop samples
-      this.fps = fps
-      const avg = this._wFrames ? this._wAcc / this._wFrames : 0
-      this._wAcc = 0
-      this._wFrames = 0
-      // exponential smoothing (70% previous, 30% new)
-      this.workMs = Math.round((this.workMs * 0.7 + avg * 0.3) * 100) / 100
     },
   },
   computed: {
@@ -84,15 +86,18 @@ export default Blits.Component('Catalog', {
       return -Math.max(0, (this.row - 2) * RAIL_BLOCK)
     },
     fpsText() {
-      return `FPS  ${this.fps}`
+      return `${this.fps} FPS`
     },
     fpsColor() {
       if (this.fps >= 50) return '#6fcf97'
       if (this.fps >= 30) return '#f2c94c'
       return '#eb5757'
     },
-    msText() {
-      return `${this.workMs} ms work${this.active ? '' : ' · idle'}`
+    frameText() {
+      return `frame ${this.frameMs} ms`
+    },
+    workText() {
+      return `work ${this.workMs} ms`
     },
   },
   methods: {
@@ -177,10 +182,11 @@ export default Blits.Component('Catalog', {
         </Element>
       </Element>
 
-      <!-- minimal stats overlay: FPS + frame time -->
-      <Element x="1620" y="26" w="276" h="104" color="#000000cc">
-        <Text x="22" y="18" :content="$fpsText" size="32" :color="$fpsColor" />
-        <Text x="22" y="64" :content="$msText" size="22" color="#b0b0be" />
+      <!-- perf HUD: FPS + frame ms + work ms (same measurements as JSTV) -->
+      <Element x="1600" y="26" w="296" h="150" color="#000000cc">
+        <Text x="22" y="16" :content="$fpsText" size="30" :color="$fpsColor" />
+        <Text x="22" y="66" :content="$frameText" size="22" color="#b0b0be" />
+        <Text x="22" y="102" :content="$workText" size="22" color="#b0b0be" />
       </Element>
     </Element>
   `,
