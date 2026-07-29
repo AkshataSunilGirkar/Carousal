@@ -40,32 +40,38 @@ export default Blits.Component('Catalog', {
   hooks: {
     // Lightning only renders when the scene changes. When idle it runs a
     // self-paced housekeeping loop whose timing is jittery, so we must NOT
-    // report that as FPS. `idle(true)` fires on going idle, `idle(false)` on
-    // becoming active again.
+    // report that as FPS or work. `idle(true)` fires on going idle,
+    // `idle(false)` on becoming active again.
     idle(isIdle) {
       this.active = !isIdle
+      if (isIdle) {
+        // Nothing is being rendered -> no work is being done.
+        this.workMs = 0
+        this._wAcc = 0
+        this._wFrames = 0
+      }
     },
-    // Use the renderer's own FPS, but only trust it while actively rendering
-    // (otherwise it bounces between ~30-60 reflecting the idle loop, not work).
-    fpsUpdate(fps) {
-      if (this.active) this.fps = fps
-    },
-    // Real main-thread work per frame: time from the start of the frame
-    // (frameTick, emitted before updates/render) until the frame's render task
-    // finishes, captured in a microtask that runs after the task completes.
-    // Averaged over 30 frames for a stable readout. This is genuinely distinct
-    // from FPS (it is ~0 when idle and rises under real render load).
+    // Accumulate real main-thread work per frame: the time from the start of a
+    // frame (frameTick, emitted before updates/render) until that frame's
+    // render task finishes, captured in a microtask that runs after the task.
     frameTick() {
       const t0 = performance.now()
       Promise.resolve().then(() => {
         this._wAcc = (this._wAcc || 0) + (performance.now() - t0)
         this._wFrames = (this._wFrames || 0) + 1
-        if (this._wFrames >= 30) {
-          this.workMs = Math.round((this._wAcc / this._wFrames) * 100) / 100
-          this._wAcc = 0
-          this._wFrames = 0
-        }
       })
+    },
+    // Roll up both stats once per FPS window (~500ms) so the readout is stable.
+    // FPS comes straight from the renderer; work is the averaged per-frame
+    // main-thread time, lightly smoothed to remove frame-to-frame jitter.
+    fpsUpdate(fps) {
+      if (!this.active) return // ignore idle-loop samples
+      this.fps = fps
+      const avg = this._wFrames ? this._wAcc / this._wFrames : 0
+      this._wAcc = 0
+      this._wFrames = 0
+      // exponential smoothing (70% previous, 30% new)
+      this.workMs = Math.round((this.workMs * 0.7 + avg * 0.3) * 100) / 100
     },
   },
   computed: {

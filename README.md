@@ -45,9 +45,32 @@ active rail.
 
 A minimal live overlay in the top-right corner shows just two numbers:
 
-- **FPS** (colour-coded: green ≥ 50, amber ≥ 30, red below)
-- **Frame time in ms** — the average work per frame, sampled from the
-  `frameTick` hook's frame delta over a rolling ~500 ms window
+- **FPS** — the renderer's real frame rate, sampled only while it is actively
+  drawing (colour-coded: green ≥ 50, amber ≥ 30, red below). Lightning renders
+  on-change, so when nothing is animating it goes idle and the FPS holds steady
+  instead of bouncing.
+- **Work (ms)** — actual main-thread time spent producing each frame (JS +
+  issuing GPU draw calls), averaged over the FPS window and lightly smoothed.
+  It reads **0 ms · idle** when the renderer isn't drawing, and rises under real
+  render load (e.g. while scrolling). GPU execution time is not included (the
+  renderer doesn't expose it to app code).
+
+## Deploying to GitHub Pages
+
+A 404 for `…github.io/src/index.js` means the **source** was published instead
+of the built app. GitHub Pages must serve the production build (`dist/`), whose
+`index.html` loads hashed, relative assets (`./assets/…`).
+
+This repo includes a workflow ([.github/workflows/deploy.yml](.github/workflows/deploy.yml))
+that builds and deploys `dist/` automatically. To enable it:
+
+1. Push to `main`/`master`.
+2. In the repo: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+The workflow then builds and publishes on every push. Routing uses the URL hash
+(`#/movies`), so deep links and refreshes work on static hosting without
+server rewrites. `base: './'` in [vite.config.js](vite.config.js) keeps asset
+paths relative, so it works under the `username.github.io/<repo>/` sub-path.
 
 ## Running on a TV
 
