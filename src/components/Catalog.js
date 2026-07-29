@@ -3,9 +3,9 @@ import Hero from './Hero.js'
 import Rail from './Rail.js'
 import { MENU } from '../lib/data.js'
 
-const HERO_BLOCK = 500 // hero height (460) + gap
-const RAIL_BLOCK = 330 // per-rail vertical step
-const CONTENT_TOP = 150 // y offset below the fixed top menu
+// Per-rail vertical step. Card block is ~324px tall, so this leaves a ~56px
+// gap between rails. MUST match the `y="$index * 380"` in the template below.
+const RAIL_BLOCK = 380
 
 /**
  * The shared page layout: a fixed top menu, a hero carousel and a vertical
@@ -31,7 +31,42 @@ export default Blits.Component('Catalog', {
       // NB: Blits calls state() once at setup time with no props (to discover
       // the state keys), so guard against `rails` being undefined here.
       railCursors: (this.rails || []).map(() => 0),
+      // stats
+      fps: 0,
+      workMs: 0,
+      active: true,
     }
+  },
+  hooks: {
+    // Lightning only renders when the scene changes. When idle it runs a
+    // self-paced housekeeping loop whose timing is jittery, so we must NOT
+    // report that as FPS. `idle(true)` fires on going idle, `idle(false)` on
+    // becoming active again.
+    idle(isIdle) {
+      this.active = !isIdle
+    },
+    // Use the renderer's own FPS, but only trust it while actively rendering
+    // (otherwise it bounces between ~30-60 reflecting the idle loop, not work).
+    fpsUpdate(fps) {
+      if (this.active) this.fps = fps
+    },
+    // Real main-thread work per frame: time from the start of the frame
+    // (frameTick, emitted before updates/render) until the frame's render task
+    // finishes, captured in a microtask that runs after the task completes.
+    // Averaged over 30 frames for a stable readout. This is genuinely distinct
+    // from FPS (it is ~0 when idle and rises under real render load).
+    frameTick() {
+      const t0 = performance.now()
+      Promise.resolve().then(() => {
+        this._wAcc = (this._wAcc || 0) + (performance.now() - t0)
+        this._wFrames = (this._wFrames || 0) + 1
+        if (this._wFrames >= 30) {
+          this.workMs = Math.round((this._wAcc / this._wFrames) * 100) / 100
+          this._wAcc = 0
+          this._wFrames = 0
+        }
+      })
+    },
   },
   computed: {
     totalRows() {
@@ -40,19 +75,18 @@ export default Blits.Component('Catalog', {
     // Vertical scroll of the hero + rails container.
     contentY() {
       if (this.row <= 1) return 0
-      const railIndex = this.row - 2
-      return -Math.max(0, railIndex * RAIL_BLOCK)
+      return -Math.max(0, (this.row - 2) * RAIL_BLOCK)
     },
-    // Merge focus state into each rail for the template.
-    railViews() {
-      const activeRail = this.row - 2
-      return this.rails.map((rail, i) => ({
-        id: rail.id,
-        label: rail.label,
-        items: rail.items,
-        active: i === activeRail,
-        cursor: this.railCursors[i],
-      }))
+    fpsText() {
+      return `FPS  ${this.fps}`
+    },
+    fpsColor() {
+      if (this.fps >= 50) return '#6fcf97'
+      if (this.fps >= 30) return '#f2c94c'
+      return '#eb5757'
+    },
+    msText() {
+      return `${this.workMs} ms work${this.active ? '' : ' · idle'}`
     },
   },
   methods: {
@@ -108,13 +142,13 @@ export default Blits.Component('Catalog', {
         <Hero slides="$hero" :cursor="$heroCursor" :active="$row === 1" />
         <Element y="500">
           <Rail
-            :for="(rail, index) in $railViews"
+            :for="(rail, index) in $rails"
             key="$rail.id"
-            y="$index * 330"
+            y="$index * 380"
             label="$rail.label"
             items="$rail.items"
-            :active="$rail.active"
-            :cursor="$rail.cursor"
+            :active="$row - 2 === $index"
+            :cursor="$railCursors[$index]"
           />
         </Element>
       </Element>
@@ -135,6 +169,12 @@ export default Blits.Component('Catalog', {
             />
           </Element>
         </Element>
+      </Element>
+
+      <!-- minimal stats overlay: FPS + frame time -->
+      <Element x="1620" y="26" w="276" h="104" color="#000000cc">
+        <Text x="22" y="18" :content="$fpsText" size="32" :color="$fpsColor" />
+        <Text x="22" y="64" :content="$msText" size="22" color="#b0b0be" />
       </Element>
     </Element>
   `,

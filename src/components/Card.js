@@ -4,18 +4,13 @@ import Blits from '@lightningjs/blits'
  * A single poster card.
  *
  * Purely presentational: it renders a coloured tile, a rating badge and a
- * title, and reacts to the `focused` prop by lifting a white border ring and
- * removing the dimming overlay.
+ * title. When it is the `focused` card it drops its dimming overlay so it
+ * stands out under the rail's stationary focus frame.
  */
 export default Blits.Component('Card', {
   props: ['item', 'focused'],
   template: `
     <Element w="200" h="280">
-      <!-- focus ring -->
-      <Element
-        x="-4" y="-4" w="208" h="288" color="#ffffff"
-        :alpha.transition="{value: $focused ? 1 : 0, duration: 150}"
-      />
       <!-- poster face -->
       <Element w="200" h="280" color="$item.color" />
       <!-- dim overlay when not focused -->
